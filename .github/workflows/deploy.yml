@@ -5,36 +5,45 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  PROJECT_ID: saxa-491514
+  REGION: europe-southwest1
+  SERVICE: gym-worker
+  IMAGE: europe-southwest1-docker.pkg.dev/saxa-491514/gym/gym-worker
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write
+      id-token: write # required for Workload Identity Federation
 
     steps:
       - uses: actions/checkout@v4
 
+      # Keyless auth: the org policy forbids service-account keys, so GitHub OIDC
+      # impersonates the deployer SA via Workload Identity Federation.
       - uses: google-github-actions/auth@v2
         with:
-          credentials_json: "${{ secrets.GCP_SA_KEY }}"
+          workload_identity_provider: projects/456617956990/locations/global/workloadIdentityPools/github/providers/github
+          service_account: github-deployer@saxa-491514.iam.gserviceaccount.com
 
       - uses: google-github-actions/setup-gcloud@v2
 
       - name: Configure Docker
-        run: gcloud auth configure-docker europe-southwest1-docker.pkg.dev --quiet
+        run: gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
 
       - name: Build and push
         run: |
-          docker build -t europe-southwest1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/gym/gym-worker .
-          docker push europe-southwest1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/gym/gym-worker
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
 
       - name: Deploy to Cloud Run
         uses: google-github-actions/deploy-cloudrun@v2
         with:
-          service: gym-worker
-          image: europe-southwest1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/gym/gym-worker
-          region: europe-southwest1
+          service: ${{ env.SERVICE }}
+          image: ${{ env.IMAGE }}
+          region: ${{ env.REGION }}
           flags: |
             --allow-unauthenticated
             --timeout=10m

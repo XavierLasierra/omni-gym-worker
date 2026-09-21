@@ -51,8 +51,13 @@ ruff format --check . && ruff check . && pytest -q
 ## Deploy
 
 `.github/workflows/deploy.yml` builds the image, pushes to Artifact Registry and deploys the
-`gym-worker` Cloud Run service in `europe-southwest1`. Set GitHub secrets `GCP_SA_KEY`,
-`GCP_PROJECT_ID` and Cloud Run secrets `GYM_WORKER_API_KEY` + `HUB_URL`.
+`gym-worker` Cloud Run service in `europe-southwest1`. Auth is **keyless** via Workload Identity
+Federation (the GCP org policy forbids service-account keys): GitHub OIDC impersonates
+`github-deployer@saxa-491514.iam.gserviceaccount.com`. Cloud Run secrets `GYM_WORKER_API_KEY` and
+`HUB_URL` must exist in Secret Manager and be readable by the runtime service account.
+
+See the "Workload Identity Federation setup" commands in the repo history / deployment runbook.
 
 Cloud Run is deployed `--allow-unauthenticated` and every request is rejected unless it carries the
-correct `X-API-Key`. Upgrading to Cloud Run IAM/OIDC is the recommended next hardening step.
+correct `X-API-Key`. Upgrading to Cloud Run IAM/OIDC for inbound is the recommended next hardening
+step.
