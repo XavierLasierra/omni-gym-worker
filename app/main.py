@@ -31,7 +31,7 @@ def run(payload: dict, x_api_key: str | None = Header(default=None, alias="X-API
 
     if job == "booking":
         return {"status": "success", "result": _run_booking()}
-    if job in ("scrape", "daily"):
+    if job == "scrape":
         return {"status": "success", "result": _run_scrape()}
     raise HTTPException(status_code=400, detail="Unknown job")
 

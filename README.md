@@ -2,24 +2,23 @@
 
 Thin Playwright worker for the **OmniHub** gym scheduler.
 
-It runs on **GCP Cloud Run in `europe-southwest1` (Madrid)** because the gym website only
-accepts a Spanish egress IP — it cannot run on the Hetzner host. It holds **no database and no
-business logic**: it asks the Hub what to do, drives a browser, and reports raw results back.
+It runs as the `gym-worker` service on the Omni host (Hetzner), reached by the Hub over the compose
+network at `http://gym-worker:8080`. It holds **no database and no business logic**: it asks the Hub
+what to do, drives a browser, and reports raw results back.
 
 ## Contract
 
 ```
-Hub  →  worker   POST /run { "job": "booking" | "scrape" | "daily" }   (X-API-Key)
-worker →  Hub    GET  /api/internal/gym/work?job=booking|scrape        (X-API-Key)
-worker →  Hub    GET  /api/internal/gym/credentials?accountId=…        (X-API-Key)
-worker →  Hub    POST /api/internal/gym/results                        (X-API-Key)
+Hub  →  worker   POST /run { "job": "booking" | "scrape" }   (X-API-Key)
+worker →  Hub    GET  /api/internal/gym/work?job=booking|scrape   (X-API-Key)
+worker →  Hub    GET  /api/internal/gym/credentials?accountId=…   (X-API-Key)
+worker →  Hub    POST /api/internal/gym/results                   (X-API-Key)
 ```
 
 - `booking` — book every due class, reporting a `started` event, then `success`/`failed` (with a
   screenshot on failure). Credentials are fetched per account from the Hub.
 - `scrape` — scrape each gym's 7-day timetable and post the raw classes; the Hub resolves class
   types, diffs the timetable and sends alerts.
-- `daily` — alias for `scrape` (the Hub adds the weekly report on Fridays).
 - `weekly` is handled entirely in the Hub (no browser).
 
 ## Environment
@@ -27,9 +26,9 @@ worker →  Hub    POST /api/internal/gym/results                        (X-API-
 | Var | Purpose |
 |---|---|
 | `WORKER_API_KEY` | Shared secret with the Hub (`GYM_WORKER_API_KEY`). |
-| `HUB_URL` | Public Hub base URL (Tailscale Funnel). |
-| `HEADLESS` | `True` in Cloud Run. |
-| `PORT` | Provided by Cloud Run. |
+| `HUB_URL` | Hub base URL (`http://omni-hub:3000` in the compose network). |
+| `HEADLESS` | `True` in production. |
+| `MAX_CONCURRENCY` | Browser workers in parallel (default `2`). |
 
 ## Local run
 
@@ -50,14 +49,9 @@ ruff format --check . && ruff check . && pytest -q
 
 ## Deploy
 
-`.github/workflows/deploy.yml` builds the image, pushes to Artifact Registry and deploys the
-`gym-worker` Cloud Run service in `europe-southwest1`. Auth is **keyless** via Workload Identity
-Federation (the GCP org policy forbids service-account keys): GitHub OIDC impersonates
-`github-deployer@saxa-491514.iam.gserviceaccount.com`. Cloud Run secrets `GYM_WORKER_API_KEY` and
-`HUB_URL` must exist in Secret Manager and be readable by the runtime service account.
+`.github/workflows/deploy.yml` builds and pushes `ghcr.io/xavierlasierra/omni-gym-worker:{latest,sha}`
+on `main`. `omni-infra` runs it as the `gym-worker` compose service (see `docker-compose.yml`); a
+deploy pulls the new `latest` image. `WORKER_API_KEY` must equal the Hub's `GYM_WORKER_API_KEY`.
 
-See the "Workload Identity Federation setup" commands in the repo history / deployment runbook.
-
-Cloud Run is deployed `--allow-unauthenticated` and every request is rejected unless it carries the
-correct `X-API-Key`. Upgrading to Cloud Run IAM/OIDC for inbound is the recommended next hardening
-step.
+Every request is rejected unless it carries the correct `X-API-Key`; the service is not published on
+a host port (only reachable from the compose network).
