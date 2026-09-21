@@ -1,5 +1,6 @@
 import base64
 import secrets
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from fastapi import FastAPI, Header, HTTPException
 
@@ -71,8 +72,7 @@ def _run_booking() -> list:
     work = hub.get_work("booking")
     booker = BookingService(headless=settings.HEADLESS)
 
-    summary = []
-    for item in work.get("classesToBook", []):
+    def process_item(item):
         class_id = item["gymClassId"]
         target_date = item["targetDate"]
 
@@ -102,6 +102,12 @@ def _run_booking() -> list:
         if screenshot:
             event["screenshotBase64"] = base64.b64encode(screenshot).decode()
         hub.post_result({"kind": "booking", "events": [event]})
-        summary.append({"gymClassId": class_id, "success": success})
+        return {"gymClassId": class_id, "success": success}
 
+    summary = []
+    with ThreadPoolExecutor(max_workers=settings.MAX_CONCURRENCY) as executor:
+        futures = [executor.submit(process_item, item) for item in work.get("classesToBook", [])]
+        for future in as_completed(futures):
+            summary.append(future.result())
+            
     return summary
