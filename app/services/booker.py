@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 from playwright.sync_api import sync_playwright
 from app.logging import get_logger
 from app.utils.strings import normalize_class_name
+from app.utils.url import is_allowed_gym_url
 from app.utils.exceptions import (
     BookingError, NavigationError, ClassNotFoundError,
     ActionNotAvailableError, LoginError, ConfirmationError
@@ -78,6 +79,8 @@ class BookingService:
 
     def _navigate_to_schedule(self, page, gym_url):
         url = f"{gym_url.rstrip('/')}/reserva-clases"
+        if not is_allowed_gym_url(url):
+            raise NavigationError("URL de gimnasio no permitida")
         logger.info(f"Navigating: {url}")
         try:
             page.goto(url, wait_until="load", timeout=TIMEOUTS["NAV"])

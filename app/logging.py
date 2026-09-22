@@ -6,10 +6,14 @@ from datetime import datetime, timezone
 
 REDACT_KEY_PARTS = ("password", "secret", "token", "api_key", "apikey", "authorization", "cookie")
 _BEARER_RE = re.compile(r"(?i)(bearer\s+)[\w\-.]+")
+_KEY_VALUE_RE = re.compile(
+    r"(?i)\b(" + "|".join(REDACT_KEY_PARTS) + r")\b\s*[=:]\s*\S+"
+)
 
 
 def _redact_string(value: str) -> str:
-    return _BEARER_RE.sub(r"\1[REDACTED]", value)
+    value = _BEARER_RE.sub(r"\1[REDACTED]", value)
+    return _KEY_VALUE_RE.sub(lambda m: f"{m.group(1)}=[REDACTED]", value)
 
 
 class JsonFormatter(logging.Formatter):
@@ -21,7 +25,7 @@ class JsonFormatter(logging.Formatter):
             "message": _redact_string(record.getMessage()),
         }
         if record.exc_info:
-            payload["exception"] = self.formatException(record.exc_info)
+            payload["exception"] = _redact_string(self.formatException(record.exc_info))
         return json.dumps(payload, ensure_ascii=False)
 
 
