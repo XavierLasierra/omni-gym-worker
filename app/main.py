@@ -11,6 +11,14 @@ from app.logging import configure_logging, get_logger
 configure_logging()
 logger = get_logger("main")
 
+import logging
+
+class HealthCheckFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.args and len(record.args) >= 3 and record.args[2] != "/"
+
+logging.getLogger("uvicorn.access").addFilter(HealthCheckFilter())
+
 app = FastAPI(title="Omni Gym Worker")
 
 
