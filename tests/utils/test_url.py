@@ -32,3 +32,14 @@ def test_is_allowed_gym_url_malformed():
     assert is_allowed_gym_url("not a url") is False
     assert is_allowed_gym_url("") is False
     assert is_allowed_gym_url("http://") is False
+    # To trigger urlparse ValueError, pass an unbalanced IPv6 bracket
+    assert is_allowed_gym_url("http://[::1") is False
+
+def test_is_allowed_gym_url_ipv6():
+    # Loopback IPv6
+    assert is_allowed_gym_url("http://[::1]") is False
+    # Multicast/Unspecified
+    assert is_allowed_gym_url("http://[::]") is False
+    assert is_allowed_gym_url("http://[ff00::1]") is False
+    # Public IPv6 (Google DNS)
+    assert is_allowed_gym_url("http://[2001:4860:4860::8888]") is True
