@@ -89,7 +89,7 @@ def _run_booking() -> list:
             {"kind": "booking", "events": [{"classId": class_id, "targetDate": target_date, "phase": "started"}]}
         )
 
-        success, message, screenshot = booker.book_class(
+        success, message, screenshot, reason = booker.book_class(
             {
                 "gym_url": item.gymUrl,
                 "gym_username": credentials.username,
@@ -107,6 +107,8 @@ def _run_booking() -> list:
             "phase": "success" if success else "failed",
             "message": message,
         }
+        if not success and reason:
+            event["reason"] = reason
         if screenshot:
             event["screenshotBase64"] = base64.b64encode(screenshot).decode()
         hub.post_result({"kind": "booking", "events": [event]})

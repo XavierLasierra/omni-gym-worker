@@ -32,12 +32,30 @@ SELECTORS = {
     ])
 }
 
+FULL_MARKERS = (
+    "llista d'espera",
+    "llista espera",
+    "lista de espera",
+    "no queden places",
+    "no quedan plazas",
+    "no hi ha places",
+    "sense places",
+    "sin plazas",
+    "aforo completo",
+    "aforament complet",
+)
+
 class BookingService:
     def __init__(self, headless: bool = True):
         self.headless = headless
 
     def book_class(self, class_data: dict):
-        """Main entry point for the booking automation flow."""
+        """Main entry point for the booking automation flow.
+
+        Returns (success, message, screenshot_bytes, reason). `reason` is a
+        coarse failure code ("full", "auth", "not-found", "timeout", "other")
+        or None on success, used by the Hub to decide on ops alerting.
+        """
         try:
             gym_url = class_data.get('gym_url')
             username = class_data.get('gym_username')
@@ -59,7 +77,7 @@ class BookingService:
                     self._handle_login(page, username, password)
                     self._wait_until_released(release_time)
                     self._confirm_booking(page)
-                    return True, "Success", None
+                    return True, "Success", None, None
                 except BookingError as e:
                     return self._handle_error(page, e)
                 except Exception as e:
@@ -68,7 +86,7 @@ class BookingService:
                     browser.close()
         except Exception as e:
             logger.error(f"Initialization failure: {e}")
-            return False, f"Error de inicialización: {str(e)}", None
+            return False, f"Error de inicialización: {str(e)}", None, "other"
 
     def _click(self, locator, error_msg, exc=BookingError):
         """Helper to click an element with error handling."""
@@ -197,4 +215,24 @@ class BookingService:
 
         # If it was a BookingError, we use its message, otherwise the exception string
         msg = e.message if hasattr(e, 'message') else str(e)
-        return False, f"Automation failed: {msg}", screenshot_bytes
+        return False, f"Automation failed: {msg}", screenshot_bytes, self._reason_for(page, e)
+
+    def _looks_full(self, page) -> bool:
+        """True when the page shows a waitlist / no-spots message."""
+        try:
+            body = page.inner_text("body").lower()
+        except Exception:
+            return False
+        return any(marker in body for marker in FULL_MARKERS)
+
+    def _reason_for(self, page, e) -> str:
+        """Classify a failure so the Hub can decide whether to alert ops."""
+        if self._looks_full(page):
+            return "full"
+        if isinstance(e, ClassNotFoundError):
+            return "not-found"
+        if isinstance(e, LoginError):
+            return "auth"
+        if isinstance(e, ConfirmationError):
+            return "timeout"
+        return "other"
