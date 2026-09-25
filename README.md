@@ -55,3 +55,18 @@ deploy pulls the new `latest` image. `WORKER_API_KEY` must equal the Hub's `GYM_
 
 Every request is rejected unless it carries the correct `X-API-Key`; the service is not published on
 a host port (only reachable from the compose network).
+
+## 📜 Layout
+
+- `app/main.py` — FastAPI app and job orchestration (browser services are imported lazily).
+- `app/hub_client.py` — calls the omni-hub internal gym API.
+- `app/services/` — Playwright scrapers/bookers (browser work only).
+- `app/utils/` — exceptions and string helpers.
+
+## 📜 Rules
+
+- **Keep the worker thin**: no database access, no scheduling, no message formatting. That all lives in the Hub.
+- **Never log credentials**. Fetch them per account from the Hub and pass them straight to Playwright.
+- **Logging**: All code logs structured JSON via `app/logging.py` — never `print`. Use `get_logger(__name__)` and lazy `%`-style formatting for parameters.
+- **Never commit or push without explicit approval.**
+- Run `ruff format --check .`, `ruff check .`, and `pytest -q` before committing.
